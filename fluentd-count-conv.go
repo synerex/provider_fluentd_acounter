@@ -9,8 +9,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 
-	//	pcounter "github.com/synerex/proto_pcounter"
 	fluentd "github.com/synerex/proto_fluentd"
+	pcounter "github.com/synerex/proto_pcounter"
 
 	api "github.com/synerex/synerex_api"
 	pbase "github.com/synerex/synerex_proto"
@@ -27,7 +27,7 @@ var (
 	local    = flag.String("local", "", "Local Synerex Server")
 	mu       sync.Mutex
 	version  = "0.01"
-	areaChan chan string
+	areaChan chan *pcounter.ACounter
 )
 
 func supplyFluentdCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
@@ -38,14 +38,18 @@ func supplyFluentdCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
 	err := proto.Unmarshal(sp.Cdata.Entity, fd)
 
 	if err == nil {
-//		fmt.Printf("%#v ::", sp.SupplyName) // "RS Notify"
-		fmt.Printf("C:%#v", fd)\
+		//		fmt.Printf("%#v ::", sp.SupplyName) // "RS Notify"
+		fmt.Printf("C:%#v", fd)
 		fmt.Printf("%s\n", ptypes.TimestampString(fd.Time))
 
-		str := fmt.Sprintf("{ts:	}")
-		areaChan <- str
+		ac := &pcounter.ACounter{
+			Ts:       fd.Time,
+			AreaName: "Shop",
+			AreaId:   0,
+			Count:    int32(fd.Record[0]),
+		}
+		areaChan <- ac
 	}
-
 
 }
 
@@ -55,10 +59,28 @@ func subscribeFluentdSupply(client *sxutil.SXServiceClient) {
 	log.Fatal("Error on subscribe")
 }
 
-func supplyChannelAcounter(client *sxutil.SXServiceClient, areaChan chan *string){
+func supplyChannelAcounter(client *sxutil.SXServiceClient, areaChan chan *pcounter.ACounter) {
+
+	for {
+		ac := <-areaChan
+
+		out, _ := proto.Marshal(ac)
+		cont := api.Content{Entity: out}
+		smo := sxutil.SupplyOpts{
+			Name:  "ACounter:0",
+			Cdata: &cont,
+		}
+		_, nerr := client.NotifySupply(&smo)
+		if nerr != nil {
+			log.Printf("Send Fail!\n", nerr) //			client.Reconnect() we need to reconsider error ...
+
+		} else {
+			log.Printf("Sent OK! %#v\n", *ac)
+		}
+
+	}
 
 }
-
 
 func main() {
 	flag.Parse()
@@ -90,9 +112,9 @@ func main() {
 
 	wg.Add(1)
 	log.Print("Subscribe Supply Fluentd Channel")
-	areaChan = make(chan *string)
+	areaChan = make(chan *pcounter.ACounter)
 
-	//	ac_client := sxutil.NewSXServiceClient(client, pbase.AREA_COUNTER_SVC, "{Client:FDconvAC}")
+	ac_client := sxutil.NewSXServiceClient(client, pbase.AREA_COUNTER_SVC, "{Client:FDconvAC}")
 	go supplyChannelAcounter(ac_client, areaChan)
 
 	go subscribeFluentdSupply(fd_client)
