@@ -1,5 +1,7 @@
 package main
 
+// simple conversion file from fluentd into people are counter format.
+
 import (
 	"context"
 	//	"encoding/json"
