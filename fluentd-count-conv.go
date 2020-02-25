@@ -41,11 +41,12 @@ func supplyFluentdCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
 		//		fmt.Printf("%#v ::", sp.SupplyName) // "RS Notify"
 		fmt.Printf("C:%#v", fd)
 		fmt.Printf("%s\n", ptypes.TimestampString(fd.Time))
+		//		fmt.Printf("%d %d \n", int32(fd.Record[1]), int32(fd.Record[0]))
 
 		ac := &pcounter.ACounter{
 			Ts:       fd.Time,
-			AreaName: "Shop",
-			AreaId:   0,
+			AreaName: fd.Tag,
+			AreaId:   uint32(fd.Record[1]),
 			Count:    int32(fd.Record[0]),
 		}
 		areaChan <- ac
